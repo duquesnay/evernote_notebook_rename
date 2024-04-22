@@ -1,1 +1,3 @@
-accessToken.txt
+node_modules
+.env
+.tokens.json

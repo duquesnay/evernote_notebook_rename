@@ -1,0 +1,22 @@
+{
+  "name": "evernote_renamer_js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.ts",
+  "type": "module",
+  "scripts": {
+    "start": "node --loader ts-node/esm --no-warnings main.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "evernote": "^2.0.5",
+    "open": "^10.1.0",
+    "prompt-sync": "^4.2.0",
+    "puppeteer": "^22.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
