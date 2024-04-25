@@ -4,7 +4,7 @@ import http from "http";
 import {URL} from "url";
 import fs from "fs";
 
-import {PORT} from "./config.ts";
+import {PORT, TOKEN_FILENAME} from "./config.ts";
 import dotenv from 'dotenv';
 import {renameRemainingNotebooks} from "./notebook_utils.ts";
 
@@ -20,7 +20,7 @@ if (!CONSUMER_KEY || !CONSUMER_SECRET) {
     process.exit(1);
 }
 
-const client = new Evernote.Client({
+const baseClient = new Evernote.Client({
     consumerKey: CONSUMER_KEY,
     consumerSecret: CONSUMER_SECRET,
     sandbox: false,
@@ -72,9 +72,9 @@ function startVolatileCallbackServer(port, reject: (reason?: any) => void, resol
 }
 
 
-function requestOAVerifier(tempOAToken: string) {
+function flowtoOAVerifier(tempOAToken: string) {
     console.log("requesting authorisation url");
-    const authorizeUrl = client.getAuthorizeUrl(tempOAToken);
+    const authorizeUrl = baseClient.getAuthorizeUrl(tempOAToken);
     console.log("authorize_url: ", authorizeUrl);
     console.debug('opening browser to retrieve oauth_verifier')
     return requestOAuthVerifier(authorizeUrl)
@@ -87,12 +87,12 @@ function requestOAuthVerifier(authorizeUrl): Promise<string> {
     });
 }
 
-async function requestFlowToAccessToken(callbackUrl) {
+async function flowToAccessToken(callbackUrl) {
     console.debug('requesting temporary token');
     const {tempOAToken, tempOASecret} = await requestTemporaryToken(callbackUrl);
     // request user authorisation from temporary token, then retrieve the oauth_verifier in the resulting callback request
     console.debug('requesting oauth verifier');
-    const oauthVerifier = <string>await requestOAVerifier(tempOAToken);
+    const oauthVerifier = <string>await flowtoOAVerifier(tempOAToken);
     console.debug('requesting access token');
     let accessToken = await requestAccessToken(tempOAToken, tempOASecret, oauthVerifier);
     return {accessToken}
@@ -102,8 +102,6 @@ async function requestFlowToAccessToken(callbackUrl) {
 // store access token and secret in file
 
 // make it executable
-
-const TOKEN_FILENAME = '.tokens.json';
 
 export function loadStoredAccessToken(): { accessToken: string } {
     if (!fs.existsSync(TOKEN_FILENAME)) {
@@ -115,7 +113,7 @@ export function loadStoredAccessToken(): { accessToken: string } {
 }
 
 export async function refreshAccessToken(callbackUrl) {
-    const {accessToken} = await requestFlowToAccessToken(callbackUrl);
+    const {accessToken} = await flowToAccessToken(callbackUrl);
     fs.writeFileSync(TOKEN_FILENAME, JSON.stringify({
         accessToken
     }));
@@ -124,13 +122,7 @@ export async function refreshAccessToken(callbackUrl) {
 
 function requestAccessToken(tempOAToken: string, tempOASecret: string, oauthVerifier: string) {
     return new Promise<string>((resolve, reject) => {
-        const client = new Evernote.Client({
-            consumerKey: CONSUMER_KEY,
-            consumerSecret: CONSUMER_SECRET,
-            sandbox: false,
-        });
-
-        client.getAccessToken(
+        baseClient.getAccessToken(
             tempOAToken,
             tempOASecret,
             oauthVerifier,
@@ -146,7 +138,7 @@ function requestAccessToken(tempOAToken: string, tempOASecret: string, oauthVeri
 
 class NoStoredTokensError extends Error {}
 
-async function eventualAuthenticatedClient() {
+async function authenticatedClientFromStoredAccessToken() {
     return new Promise<Evernote.Client>(async (resolve, reject) => {
         try {
 // 1 get the tokens from the file store
@@ -164,7 +156,7 @@ async function eventualAuthenticatedClient() {
         });
 // 5 if access token, get the user
 
-            console.debug('getting user with new authenticated client')
+            console.debug('getting user with new authenticated baseClient')
             const noteStore = authenticatedClient.getNoteStore();
             await noteStore.getSyncState(); // early and cheap checkl
             let user = await authenticatedClient.getUserStore().getUser()
@@ -194,23 +186,27 @@ async function pauseUntilRateLimitReset(rateLimitDuration: number) {
     await delay(rateLimitDuration);
 }
 
-const authenticatedClient = await eventualAuthenticatedClient().then((client) => {
-    return client
-}).catch(async (error) => {
-    if (error.errorCode === Evernote.Errors.EDAMErrorCode.RATE_LIMIT_REACHED) {
-        await pauseUntilRateLimitReset(error.rateLimitDuration);
-    } else {
-        if (error instanceof NoStoredTokensError) {
-            console.log('No tokens found in the token store');
+async function openAuthenticatedClient() {
+    return await authenticatedClientFromStoredAccessToken().then((client) => {
+        return client
+    }).catch(async (error) => {
+        if (error.errorCode === Evernote.Errors.EDAMErrorCode.RATE_LIMIT_REACHED) {
+            await pauseUntilRateLimitReset(error.rateLimitDuration);
         } else {
-            console.log('error with existing access token: ', error.message);
+            if (error instanceof NoStoredTokensError) {
+                console.log('No tokens found in the token store');
+            } else {
+                console.log('error with existing access token: ', error.message);
+            }
+            console.debug('retrieving new tokens');
+            await refreshAccessToken(CALLBACK_URL);
+            console.debug('working out new tokens again');
         }
-        console.debug('retrieving new tokens');
-        await refreshAccessToken(CALLBACK_URL);
-        console.debug('working out new tokens again');
-    }
-    return await eventualAuthenticatedClient()
-})
+        return await authenticatedClientFromStoredAccessToken()
+    });
+}
+
+const authenticatedClient = await openAuthenticatedClient()
 
 // take all the notebooks, if they are part of a folder, rename the notebook "foldername_notebookname"
 // if they are not part of a folder, don't rename the notebook
