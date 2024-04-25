@@ -1,4 +1,4 @@
-# Evernote Notebook Renamer
+# Evernote Notebooks Batch Renamer
 
 ## Description
 
