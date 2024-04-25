@@ -1,4 +1,4 @@
-import {Evernote} from 'evernote';
+import Evernote from 'evernote';
 
 async function prefixNotebookNameIfNeeded(notebook: any, authenticatedClient: Evernote.Client) {
     let currentName = notebook.name;
