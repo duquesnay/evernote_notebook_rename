@@ -2,9 +2,9 @@
 
 ## Description
 
-This project is a utility for renaming Evernote notebooks. It prefixes the notebook name with the stack name if the notebook is part of a stack. If the notebook is not part of a stack or is already prefixed, it is not renamed.
+This project is a utility for renaming Evernote notebooks. It prefixes the notebook name with the stack name if the notebook is part of a stack (left untouched if it's not). 
 Note: 
-- somewhere in there is also an OAuth 1 workflow implementation for Evernote API meant for scripts (opening a browser if needed, retrieving the access token through a single use local http server, etc.).
+- somewhere in there is an OAuth 1 workflow implementation for Evernote API meant for standalone scripts (opening a browser if needed, retrieving the access token through a single use local http server, etc.). Feel free to reuse / steal it
 - in the future, the OA1 workflow becomes a separate npm package (if I'm going back to evernote)
 
 ## Installation
